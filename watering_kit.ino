@@ -46,7 +46,7 @@ struct system_state_t {
   // Toggle which trace is active on the LED display
   unsigned int display_state;
   // When we engage the pump, record what the initial error was
-  int error_on_egage[NUM_SENSORS];
+  float error_on_egage[NUM_SENSORS];
   // Sensor to display live readout from
   unsigned int focus_sensor;
   // Read out raw measurements and normalize to %
@@ -96,7 +96,18 @@ void setup() {
   // declare switch as input
   pinMode(system_state.button_pin, INPUT);
   //pinMode(ROTARY_ANGLE_SENSOR, INPUT);
-  
+
+  // on boot, always start with all relays off / pump off
+  for (unsigned int relay_index = 0; relay_index < 1; ++relay_index) {
+    digitalWrite(system_state.relay_pinouts[relay_index], LOW);
+    system_state.relay_state_mask &= ~(1 << relay_index);
+    delay(50);
+  }
+  digitalWrite(system_state.pump_pin, LOW);
+  system_state.pump_state = 0;
+  system_state.ticks_since_pump_engagement = 0;
+  delay(50);
+
   poll_sensors();
   control_pump();
 }
@@ -232,7 +243,7 @@ void control_pump() {
     if (system_state.normalized_mv[sensor_index] < TOO_LOW) {
       // toggle relay
       digitalWrite(system_state.relay_pinouts[sensor_index], HIGH);
-      system_state.error_on_egage[sensor_index] = system_state.normalized_mv;
+      system_state.error_on_egage[sensor_index] = system_state.normalized_mv[sensor_index];
       system_state.active_relay_mask |= (1 << sensor_index);
       delay(50);
 
