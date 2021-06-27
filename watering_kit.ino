@@ -98,7 +98,7 @@ void setup() {
   //pinMode(ROTARY_ANGLE_SENSOR, INPUT);
 
   // on boot, always start with all relays off / pump off
-  for (unsigned int relay_index = 0; relay_index < 1; ++relay_index) {
+  for (unsigned int relay_index = 0; relay_index < NUM_SENSORS; ++relay_index) {
     digitalWrite(system_state.relay_pinouts[relay_index], LOW);
     system_state.relay_state_mask &= ~(1 << relay_index);
     delay(50);
@@ -233,7 +233,7 @@ void control_pump() {
     return;
   }
 
-  for (unsigned int sensor_index = 0; sensor_index < 1; ++sensor_index) {
+  for (unsigned int sensor_index = 0; sensor_index < NUM_SENSORS; ++sensor_index) {
     // ignore hoses that arent plugged in
     if ((system_state.active_relay_mask & (1 << sensor_index)) == 0) {
       continue;
