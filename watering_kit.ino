@@ -10,8 +10,8 @@ RTC_DS1307 RTC;
 #define NUM_SENSORS 4
 #define MAX_RAW_MEASUREMENT 600
 #define MIN_RAW_MEASUREMENT 360
-#define TOO_LOW 25
-#define TOO_HIGH 40
+#define TOO_LOW 33
+#define TOO_HIGH 50
 #define TIME_HISTORY 100
 #define NUM_DISPLAY_STATES 4
 
@@ -67,7 +67,7 @@ struct system_state_t {
   int ticks_since_pump_engagement;
 };
 system_state_t system_state = { 
-  0x1,               // active_relay_mask
+  0x3,               // active_relay_mask
   12,                // button_pin 
   0,                 // display_state
   {0, 0, 0, 0},      // error_on_engage
@@ -78,7 +78,7 @@ system_state_t system_state = {
   0,                 // pump_state
   {6, 8, 9, 10},     // relay_pinouts
   0,                 // relay_state_mask
-  {A0, A1, A2, A3}, // sensor_pinouts
+  {A0, A1, A2, A3},  // sensor_pinouts
   0                  // ticks_since_pump_engagemnet
 };
 
@@ -97,6 +97,8 @@ void setup() {
   pinMode(system_state.button_pin, INPUT);
   //pinMode(ROTARY_ANGLE_SENSOR, INPUT);
 
+  delay(100);
+
   // on boot, always start with all relays off / pump off
   for (unsigned int relay_index = 0; relay_index < NUM_SENSORS; ++relay_index) {
     digitalWrite(system_state.relay_pinouts[relay_index], LOW);
@@ -108,8 +110,8 @@ void setup() {
   system_state.ticks_since_pump_engagement = 0;
   delay(50);
 
-  poll_sensors();
-  control_pump();
+  pollSensors();
+  controlPump();
 }
 
 void plotRollingTimeSeries(const int sensor) {
@@ -178,10 +180,10 @@ void plotRollingTimeSeries(const int sensor) {
 */
 void loop() {
   // read the value from the moisture sensors:
-  poll_sensors();
+  pollSensors();
   
   // if any of the plants need to be watered, do that
-  control_pump();
+  controlPump();
 
   // toggle display screen
   int button_state = digitalRead(system_state.button_pin);
@@ -218,7 +220,7 @@ void loop() {
 /*
 * Read out sensor measurements into normalized (%) values
 */
-void poll_sensors() {
+void pollSensors() {
   for (unsigned int sensor_index = 0; sensor_index < NUM_SENSORS; ++sensor_index) {
     system_state.normalized_mv[sensor_index] = max(0, map(analogRead(system_state.sensor_pinouts[sensor_index]), MAX_RAW_MEASUREMENT, MIN_RAW_MEASUREMENT, 0, 100));
     delay(20);
@@ -228,7 +230,7 @@ void poll_sensors() {
 /*
 * Use thresholding to determine relay/pump status
 */
-void control_pump() {
+void controlPump() {
   if (system_state.pump_override > 0) {
     return;
   }
@@ -242,10 +244,12 @@ void control_pump() {
     // plant n needs water?
     if (system_state.normalized_mv[sensor_index] < TOO_LOW) {
       // toggle relay
-      digitalWrite(system_state.relay_pinouts[sensor_index], HIGH);
-      system_state.error_on_egage[sensor_index] = system_state.normalized_mv[sensor_index];
-      system_state.active_relay_mask |= (1 << sensor_index);
-      delay(50);
+      if ((system_state.relay_state_mask & (1 << sensor_index)) == 0) {
+        digitalWrite(system_state.relay_pinouts[sensor_index], HIGH);
+        system_state.error_on_egage[sensor_index] = system_state.normalized_mv[sensor_index];
+        system_state.relay_state_mask |= (1 << sensor_index);
+        delay(50);
+      }
 
       // if the pump is not already engaged, turn it on
       if (system_state.pump_state == 0) {
@@ -257,9 +261,11 @@ void control_pump() {
     // plant n has enough water?
     else if (system_state.normalized_mv[sensor_index] > TOO_HIGH) {
       // toggle relay
-      digitalWrite(system_state.relay_pinouts[sensor_index], LOW);
-      system_state.relay_state_mask &= ~(1 << sensor_index);
-      delay(50);
+      if (system_state.relay_state_mask & (1 << sensor_index)) {
+        digitalWrite(system_state.relay_pinouts[sensor_index], LOW);
+        system_state.relay_state_mask &= ~(1 << sensor_index);
+        delay(50);
+      }
 
       // if not other relays are open, turn the pump off
       if (system_state.relay_state_mask == 0) {
